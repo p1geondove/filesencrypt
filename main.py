@@ -5,9 +5,8 @@ import os, sys
 from Cryptodome.Random import get_random_bytes
 import pygame as pg
 import easygui
-#from encryp.py import 
 
-clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2 = 0,0,0,0,0,0,0,0
+clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, button = 0,0,0,0,0,0,0,0,0
 
 class InputBox:
     def __init__(self, pos, font, text='', name='',win=0):
@@ -27,17 +26,15 @@ class InputBox:
 
     def reset(self):
         self.color = COLOR_INACTIVE
+        self.text = ''
         self.txt_surface = FONT.render(self.name, True, self.color)
 
-    def handle_event(self, event):
+    def handle(self, event):
         if event.type == pg.MOUSEBUTTONDOWN:
-            # If the user clicked on the input_box rect.
             if self.rect.collidepoint(event.pos):
-                # Toggle the active variable.
                 self.active = not self.active
             else:
                 self.active = False
-            # Change the current color of the input box.
             self.color = COLOR_ACTIVE if self.active else COLOR_INACTIVE
         if event.type == pg.KEYDOWN:
             if self.active:
@@ -57,19 +54,15 @@ class InputBox:
                 else:
                     self.text += event.unicode
 
-            # Re-render the text.
             self.txt_surface = FONT.render(self.text, True, self.color)
         self.update()
             
     def update(self):
-        # Resize the box if the text is too long.
         width = max(200, self.txt_surface.get_width()+10)
         self.rect.w = width
 
     def draw(self, screen):
-        # Blit the text.
         screen.blit(self.txt_surface, (self.rect.x+5, self.rect.y+5))
-        # Blit the rect.
         pg.draw.rect(screen, self.color, self.rect, 2)
 
 class Button:
@@ -85,6 +78,9 @@ class Button:
         if event.type == pg.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 self.on = True
+                return True
+        else:
+            self.on = False
     
     def draw(self):
         self.win.blit(self.img,self.pos)
@@ -106,9 +102,7 @@ class FileSel(Button):
         self.win.blit(self.img,self.pos)
 
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
@@ -185,49 +179,58 @@ def enter(event):
         return True
     return False
 
+def set_icon(resource):
+    img = pg.image.load(resource_path(resource))
+    pg.display.set_icon(img)
+
 def setup():
-    global clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2
+    global clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, button
     pg.init()
-    screen = pg.display.set_mode((300, 70))
+    screen = pg.display.set_mode((340, 70))
+    pg.display.set_caption('FileEncrypt')
+    set_icon(r'icon.png')
     COLOR_INACTIVE = pg.Color('purple4')
     COLOR_ACTIVE = pg.Color('purple1')
     FONT = pg.font.Font(None, 32)
     FONT2 = pg.font.Font(None, 20)
-
     clock = pg.time.Clock()
-    selfile = FileSel(screen,(0,0),r'button.png')
+    selfile = FileSel(screen,(0,0),r'explorer.png')
     pwbox = InputBox((70,13), FONT, name='password',win=screen)
+    button = Button(screen, (275,0), r'startbutton.png')
     
     selfile.draw()
+    button.draw()
 
 def main():
     txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
     done = False
     wrong_data = False
+    pw = False
     while not done:
-        
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 done = True
             clear_screen(screen)
             selfile.handle(event)
+            pw = pwbox.handle(event)
+            button.handle(event)
             
             if selfile.file:
                 if selfile.file[-4:] == '.txt':
-                    pw = pwbox.handle_event(event)
                     txt = FONT2.render('Set Password', True, pg.Color('darkgreen'))
-                    if pw and enter(event):
-                        encrypt_file(selfile.file,pw)
+                    if pwbox.text and (enter(event) or button.on):
+                        encrypt_file(selfile.file,pwbox.text)
                         selfile.file = ''
-                        pwbox.reset()
 
                 elif selfile.file[-3:] == '.lc':
-                    pw = pwbox.handle_event(event)
                     txt = FONT2.render('Enter Password', True, pg.Color('darkgreen'))
-                    if pw and (enter(event) or button.on):
+                    if pwbox.text and (enter(event) or button.on):
                         try:
                             enc_dict = gen_dict(selfile.file)
-                            decrypted = decrypt(enc_dict,pw)
+                            if not enc_dict:
+                                txt = FONT2.render('File corrupted', True, pg.Color('darkred'))
+                            else:
+                                decrypted = decrypt(enc_dict,pwbox.text)
                         except ValueError:
                             pwbox.color = pg.Color('darkred')
                         else:
@@ -235,20 +238,20 @@ def main():
                                 file.write(decrypted.decode('utf8'))
                                 file.close()
                             os.remove(selfile.file)
-                            print(decrypted.decode('utf8'))
                             selfile.file = ''
-                            pwbox.reset()
 
                 else:
                     txt = FONT2.render('.txt or .lc accepted', True, pg.Color('darkred'))
-
                 
-
             else:
                 txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
 
+            if pw:
+                pwbox.reset()
+
             screen.blit(txt, (70,50))
             pwbox.draw(screen)
+            button.draw()
             selfile.draw()
 
         pg.display.flip()
