@@ -5,6 +5,8 @@ import os
 from Cryptodome.Random import get_random_bytes
 import easygui
 
+
+
 def encrypt(plain_text, password):
     salt = get_random_bytes(AES.block_size)
     private_key = hashlib.scrypt(
@@ -32,25 +34,8 @@ def decrypt(enc_dict, password):
 
     return decrypted
 
-def gen_dict(filename):
-    with open(filename,'r') as file:
-        out, text = [],''
-
-        for char in file.read():
-            if char == '@' or char == '\n':
-                out.append(text)
-                text = ''
-            else:
-                text = text + char
-
-        enc_dict = {}
-        for x in range(0,len(out),2):
-            enc_dict[out[x]] = out[x+1]
-        
-        return enc_dict
-
-def encrypt_file(filename,key):
-    with open(filename,'r') as file:
+def encrypt_file(filedest,key):
+    with open(filedest,'r') as file:
         ctext = ''
 
         for x in file.readlines():
@@ -60,13 +45,28 @@ def encrypt_file(filename,key):
         clist = []
 
         for x in cryp:
-            clist.append(x+'@'+cryp[x]+'\n')
+            clist.append(cryp[x]+'\n')
         
-    with open('test.lc','w') as file:
+    with open(filedest[:-4]+'.lc','w') as file:
         for x in clist:
             file.write(x)
 
+def gen_dict(filedest):
+    seq = ['cipher_text','salt','nonce','tag']
+    with open(filedest,'r') as file:
+        content =  file.readlines()
+        enc_dict = {}
+        try:
+            for x in range(len(seq)):
+                enc_dict[seq[x]] = content[x].translate({ord('\n'): None})
+        except IndexError:
+            print('File Corrupted!')
+            return False
+        
+        return enc_dict
+
 def main():
+    print('Open a file to en/decrypt (.txt/.lc)')
     filedest = easygui.fileopenbox()
 
     if filedest[-4:] == '.txt':
@@ -75,17 +75,20 @@ def main():
 
     elif filedest[-3:] == '.lc':
         enc_dict = gen_dict(filedest)
+        if not enc_dict:
+            return
 
         on = True
         while on:
-            key = input('Password: ')
+            key = input('Enter password: ')
             try:
                 decrypted = decrypt(enc_dict,key)
             except ValueError:
-                print('Wrong Key!\n')
+                print('Wrong password or file destroyed\n')
             else:
                 on = False
                 print(bytes.decode(decrypted))
         
 if __name__ == '__main__':
     main()
+    input('Press enter to close the window')
