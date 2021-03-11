@@ -32,7 +32,7 @@ class InputBox:
     def handle(self, event):
         if event.type == pg.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
-                self.active = not self.active
+                self.active = True
             else:
                 self.active = False
             self.color = COLOR_ACTIVE if self.active else COLOR_INACTIVE
@@ -48,9 +48,7 @@ class InputBox:
                     if self.text == '':
                         self.reset()
                 elif self.press_return(event):
-                    txt = self.text
-                    self.text = self.name
-                    return txt
+                    return self.text
                 else:
                     self.text += event.unicode
 
@@ -245,9 +243,6 @@ def main():
                 
             else:
                 txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
-
-            if pw:
-                pwbox.reset()
 
             screen.blit(txt, (70,50))
             pwbox.draw(screen)
