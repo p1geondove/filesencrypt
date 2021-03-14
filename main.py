@@ -1,16 +1,22 @@
-from base64 import b64encode, b64decode
-import hashlib
-from Cryptodome.Cipher import AES
-import os, sys
 from Cryptodome.Random import get_random_bytes
+from Cryptodome.Protocol.KDF import PBKDF2
+from Cryptodome.Cipher import AES
+from base64 import b64encode, b64decode
 import pygame as pg
-import easygui
+import file_encryp as fc
+import os, sys, hashlib, easygui
 
-clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, button = 0,0,0,0,0,0,0,0,0
+clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, FONT3, button = 0,0,0,0,0,0,0,0,0,0
+salt = b'\xcf\xa3\\[\x9b\x05\xa6\x070\x1cq\xa7r\xd1:\x19\xf7\xc1\x8d$\xb0\x80\xce\xdd\xf8\x9d\xb4\xa5-\x16\x03\xe1'
+
+"""
+TODO
+
+"""
 
 class InputBox:
     def __init__(self, pos, font, text='', name='',win=0):
-        self.rect = pg.Rect(pos, (200,font.get_height()+13))
+        self.rect = pg.Rect(pos, (200,font.get_height()+8))
         self.color = COLOR_INACTIVE
         self.name = name
         self.text = name
@@ -71,14 +77,19 @@ class Button:
         self.rect = pg.Rect(pos,self.img.get_size())
         self.on = False
         self.text = ''
+        self.cursor = False
 
     def handle(self,event):
-        if event.type == pg.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
+             
+        if self.rect.collidepoint(pg.mouse.get_pos()):
+            self.cursor = True
+            if event.type == pg.MOUSEBUTTONDOWN:
                 self.on = True
                 return True
+            else:
+                    self.on = False
         else:
-            self.on = False
+            self.cursor = False
     
     def draw(self):
         self.win.blit(self.img,self.pos)
@@ -90,12 +101,16 @@ class FileSel(Button):
         self.img = pg.image.load(resource_path(img))
         self.rect = pg.Rect(pos,self.img.get_size())
         self.file = ''
+        self.cursor = False
      
     def handle(self, event):
-        if event.type == pg.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(event.pos):
+        if self.rect.collidepoint(pg.mouse.get_pos()):
+            self.cursor = True
+            if event.type == pg.MOUSEBUTTONDOWN:
                 self.file = easygui.fileopenbox()
-    
+        else:
+            self.cursor = False
+            
     def draw(self):
         self.win.blit(self.img,self.pos)
 
@@ -112,66 +127,6 @@ def clear_screen(screen, color = pg.Color('grey10')):
     rect = pg.Rect((0,0),size)
     pg.draw.rect(screen, color, rect)
 
-def encrypt(plain_text, password):
-    salt = get_random_bytes(AES.block_size)
-    private_key = hashlib.scrypt(
-        password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
-    cipher_config = AES.new(private_key, AES.MODE_GCM)
-    cipher_text, tag = cipher_config.encrypt_and_digest(bytes(plain_text, 'utf-8'))
-
-    return {
-        'cipher_text': b64encode(cipher_text).decode('utf-8'),
-        'salt': b64encode(salt).decode('utf-8'),
-        'nonce': b64encode(cipher_config.nonce).decode('utf-8'),
-        'tag': b64encode(tag).decode('utf-8')
-    }
-
-def decrypt(enc_dict, password):
-    salt = b64decode(enc_dict['salt'])
-    cipher_text = b64decode(enc_dict['cipher_text'])
-    nonce = b64decode(enc_dict['nonce'])
-    tag = b64decode(enc_dict['tag'])
-    
-    private_key = hashlib.scrypt(
-        password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
-    cipher = AES.new(private_key, AES.MODE_GCM, nonce=nonce)
-    decrypted = cipher.decrypt_and_verify(cipher_text, tag)
-
-    return decrypted
-
-def encrypt_file(filedest,key):
-    with open(filedest,'r') as file:
-        ctext = ''
-
-        for x in file.readlines():
-            ctext = ctext + x
-
-        cryp = encrypt(ctext,key)
-        clist = []
-
-        for x in cryp:
-            clist.append(cryp[x]+'\n')
-        
-    with open(filedest[:-4]+'.lc','w') as file:
-        for x in clist:
-            file.write(x)
-    
-    os.remove(filedest)
-
-def gen_dict(filedest):
-    seq = ['cipher_text','salt','nonce','tag']
-    with open(filedest,'r') as file:
-        content =  file.readlines()
-        enc_dict = {}
-        try:
-            for x in range(len(seq)):
-                enc_dict[seq[x]] = content[x].translate({ord('\n'): None})
-        except IndexError:
-            print('File Corrupted!')
-            return False
-        
-        return enc_dict
-
 def enter(event):
     if event.type == pg.KEYDOWN and (event.key == pg.K_RETURN or event.key == 1073741912):
         return True
@@ -182,18 +137,19 @@ def set_icon(resource):
     pg.display.set_icon(img)
 
 def setup():
-    global clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, button
+    global clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, FONT3, button
     pg.init()
-    screen = pg.display.set_mode((340, 70))
+    screen = pg.display.set_mode((340, 64))
     pg.display.set_caption('FileEncrypt')
     set_icon(r'icon.png')
     COLOR_INACTIVE = pg.Color('purple4')
     COLOR_ACTIVE = pg.Color('purple1')
     FONT = pg.font.Font(None, 32)
     FONT2 = pg.font.Font(None, 20)
+    FONT3 = pg.font.Font(None, 70)
     clock = pg.time.Clock()
     selfile = FileSel(screen,(0,0),r'explorer.png')
-    pwbox = InputBox((70,13), FONT, name='password',win=screen)
+    pwbox = InputBox((70,13), FONT, name='Password',win=screen)
     button = Button(screen, (275,0), r'startbutton.png')
     
     selfile.draw()
@@ -203,48 +159,45 @@ def main():
     txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
     done = False
     wrong_data = False
-    pw = False
     while not done:
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 done = True
             clear_screen(screen)
-            selfile.handle(event)
-            pw = pwbox.handle(event)
-            button.handle(event)
             
-            if selfile.file:
-                if selfile.file[-4:] == '.txt':
-                    txt = FONT2.render('Set Password', True, pg.Color('darkgreen'))
-                    if pwbox.text and (enter(event) or button.on):
-                        encrypt_file(selfile.file,pwbox.text)
-                        selfile.file = ''
+            button.handle(event)
+            selfile.handle(event)
 
-                elif selfile.file[-3:] == '.lc':
+            if selfile.file:
+                pw = pwbox.handle(event)
+
+                if selfile.file[-3:] == '.lk':
                     txt = FONT2.render('Enter Password', True, pg.Color('darkgreen'))
                     if pwbox.text and (enter(event) or button.on):
-                        try:
-                            enc_dict = gen_dict(selfile.file)
-                            if not enc_dict:
-                                txt = FONT2.render('File corrupted', True, pg.Color('darkred'))
-                            else:
-                                decrypted = decrypt(enc_dict,pwbox.text)
-                        except ValueError:
+                        txt = FONT3.render('Decrypting', True, pg.Color('Yellow3'))
+                        screen.blit(txt, (35,7))
+                        pg.display.flip()
+                        success = fc.decrypt_file(selfile.file,pwbox.text)
+                        if not success:
+                            txt = FONT2.render('Error decrypting', True, pg.Color('Yellow3'))
                             pwbox.color = pg.Color('darkred')
-                        else:
-                            with open(selfile.file[:-3]+'.txt','w') as file:
-                                file.write(decrypted.decode('utf8'))
-                                file.close()
-                            os.remove(selfile.file)
-                            selfile.file = ''
-
                 else:
-                    txt = FONT2.render('.txt or .lc accepted', True, pg.Color('darkred'))
-                
+                    txt = FONT2.render('Set Password', True, pg.Color('darkgreen'))
+                    if pwbox.text and (enter(event) or button.on):
+                        txt = FONT3.render('Encrypting', True, pg.Color('Yellow3'))
+                        screen.blit(txt, (35,7))
+                        pg.display.flip()
+                        fc.encrypt_file(selfile.file,pwbox.text)
+                        selfile.file = ''
             else:
                 txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
 
-            screen.blit(txt, (70,50))
+            if selfile.cursor or button.cursor:
+                pg.mouse.set_system_cursor(pg.SYSTEM_CURSOR_HAND)
+            else:
+                pg.mouse.set_system_cursor(pg.SYSTEM_CURSOR_ARROW) 
+
+            screen.blit(txt, (70,47))
             pwbox.draw(screen)
             button.draw()
             selfile.draw()
