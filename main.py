@@ -107,7 +107,9 @@ class FileSel(Button):
         if self.rect.collidepoint(pg.mouse.get_pos()):
             self.cursor = True
             if event.type == pg.MOUSEBUTTONDOWN:
-                self.file = easygui.fileopenbox()
+                file = easygui.fileopenbox()
+                if file:
+                    self.file = file
         else:
             self.cursor = False
             
@@ -136,10 +138,15 @@ def set_icon(resource):
     img = pg.image.load(resource_path(resource))
     pg.display.set_icon(img)
 
+def pstr(string,mlen=35):
+    if len(string) > mlen:
+        return string[:mlen//2] + ' ... ' + string[-mlen//2:]
+    return string
+
 def setup():
     global clock, pwbox, selfile, screen, COLOR_INACTIVE, COLOR_ACTIVE, FONT, FONT2, FONT3, button
     pg.init()
-    screen = pg.display.set_mode((340, 64))
+    screen = pg.display.set_mode((340, 75))
     pg.display.set_caption('FileEncrypt')
     set_icon(r'icon.png')
     COLOR_INACTIVE = pg.Color('purple4')
@@ -160,6 +167,7 @@ def main():
     done = False
     wrong_data = False
     while not done:
+        error = False
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 done = True
@@ -170,19 +178,41 @@ def main():
 
             if selfile.file:
                 pw = pwbox.handle(event)
+                size = os.path.getsize(selfile.file)
+
+                if size > 10**8:
+                    if size > 10**9:
+                        filecolor = 'darkred'
+                        size = str(size//10**7/100) + ' gb'
+                    else:
+                        filecolor = 'yellow3'
+                        size = str(size//10**6) + ' mb'
+                elif size > 10**5:
+                    filecolor = 'darkgreen'
+                    size = str(size//10**4/100) + ' mb'
+                else:
+                    filecolor = 'darkgreen'
+                    size = str(size//10/100) + ' kb'
+
+                filename = FONT2.render(pstr(selfile.file), True, pg.Color('purple3'))
+                filesize = FONT2.render(size, True, pg.Color(filecolor))
 
                 if selfile.file[-3:] == '.lk':
-                    txt = FONT2.render('Enter Password', True, pg.Color('darkgreen'))
+                    txt = FONT2.render(f'Enter Password for:', True, pg.Color('darkgreen'))
                     if pwbox.text and (enter(event) or button.on):
                         txt = FONT3.render('Decrypting', True, pg.Color('Yellow3'))
                         screen.blit(txt, (35,7))
                         pg.display.flip()
                         success = fc.decrypt_file(selfile.file,pwbox.text)
+                        selfile.file = ''
                         if not success:
-                            txt = FONT2.render('Error decrypting', True, pg.Color('Yellow3'))
+                            clear_screen(screen)
+                            txt = FONT2.render('Error decrypting', True, pg.Color('darkred'))
                             pwbox.color = pg.Color('darkred')
+                            error = True
+
                 else:
-                    txt = FONT2.render('Set Password', True, pg.Color('darkgreen'))
+                    txt = FONT2.render(f'Set Password to encrypt:', True, pg.Color('darkgreen'))
                     if pwbox.text and (enter(event) or button.on):
                         txt = FONT3.render('Encrypting', True, pg.Color('Yellow3'))
                         screen.blit(txt, (35,7))
@@ -191,6 +221,8 @@ def main():
                         selfile.file = ''
             else:
                 txt = FONT2.render('Select file', True, pg.Color('darkgreen'))
+                filename = FONT2.render('', True, pg.Color('darkgreen'))
+                filesize = FONT2.render('', True, pg.Color('darkgreen'))
 
             if selfile.cursor or button.cursor:
                 pg.mouse.set_system_cursor(pg.SYSTEM_CURSOR_HAND)
@@ -198,10 +230,16 @@ def main():
                 pg.mouse.set_system_cursor(pg.SYSTEM_CURSOR_ARROW) 
 
             screen.blit(txt, (70,47))
+            screen.blit(filename, (70,60))
+            screen.blit(filesize, (5,60))
             pwbox.draw(screen)
             button.draw()
             selfile.draw()
 
+            if error:
+                pg.display.flip()
+                pg.time.delay(1000)
+            
         pg.display.flip()
         clock.tick(30)
 
